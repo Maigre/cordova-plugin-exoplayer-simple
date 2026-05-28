@@ -375,7 +375,83 @@ function startService(success, error) {
     // to cordova.plugins.audiofocus.startKeepalive() so the ExoPlayer FG
     // service is up before the first GPS-triggered step audio fires, even
     // before any per-player ExoPlayer instance has been created.
+    // iOS no-ops — there is no FG service to start.
     exec(success || function(){}, error || function(){}, SERVICE, 'startService', []);
+}
+
+// ---------- iOS-only surface (added in Round 25, ios-native-plan §2 I.B) ----
+//
+// All methods below succeed on iOS and errback on Android (action not
+// registered). The webapp gates calls on PLATFORM === 'ios'. They were
+// migrated here from cordova-plugin-audiofocus@1.8.0 (Round 21/22 surface)
+// because the audio engine should own AVAudioSession lifecycle, the
+// lock-screen tile, and the resume snapshot — keeping audiofocus iOS
+// strictly an interruption-observer-as-telemetry plugin.
+
+// AVAudioSession lifecycle. activateSession is idempotent.
+function activateSession(success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'activateSession', []);
+}
+
+function deactivateSession(success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'deactivateSession', []);
+}
+
+// Equivalent to deactivateSession + notifyOthers=YES. Kept as a separate
+// action because the audiofocus 1.8.0 JS API named it releaseSession; the
+// webapp migrating from audiofocus to audio keeps the verb the same.
+function releaseSession(success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'releaseSession', []);
+}
+
+// A2 audio-engine-reset path: deactivate + brief settle + reactivate.
+// Clears the iOS "fail once stay poisoned" AVAudioSession state observed in
+// the GIVORS field test (M3 silent-audio-on-rearm) without losing session
+// ownership.
+function resetSession(success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'resetSession', []);
+}
+
+// F-A2 telemetry parity with audiofocus's getAudioSessionState. Returns a
+// Promise resolving to {outputVolume, currentPort, currentPortName,
+// currentCategory, secondaryAudioShouldBeSilenced, sessionActive, nowPlayingActive}.
+function getSessionState() {
+    return new Promise(function(resolve, reject) {
+        exec(resolve, reject, SERVICE, 'getSessionState', []);
+    });
+}
+
+// MPNowPlayingInfoCenter + MPRemoteCommandCenter (R22 migration). Lock-screen
+// tile with all remote-command center commands disabled. Hardware volume
+// buttons remain functional (system-level, not overridable).
+// options shape: { title: String, artist: String, albumTitle: String } — all optional.
+function setupNowPlaying(options, success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'setupNowPlaying', [options || {}]);
+}
+
+function clearNowPlaying(success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'clearNowPlaying', []);
+}
+
+// NSUserDefaults step-state cache (R21 migration). parcours.store() dual-writes
+// resumeStepVoicePos here; parcours.restore() reads it on cold relaunch to
+// recover when the WKWebView's localStorage was evicted.
+// snapshot shape: { stepId: Number, seekPosSec: Number, pID: String }
+function setResumeSnapshot(snapshot, success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'setResumeSnapshot', [snapshot || {}]);
+}
+
+// Returns a Promise resolving to:
+//   { found: Bool, stepId: Number|null, seekPosSec: Number|null,
+//     pID: String|null, savedAtMs: Number|null, ageMs: Number }
+function getResumeSnapshot() {
+    return new Promise(function(resolve, reject) {
+        exec(resolve, reject, SERVICE, 'getResumeSnapshot', []);
+    });
+}
+
+function clearResumeSnapshot(success, error) {
+    exec(success || function(){}, error || function(){}, SERVICE, 'clearResumeSnapshot', []);
 }
 
 module.exports = {
@@ -383,4 +459,15 @@ module.exports = {
     releaseAll: releaseAll,
     startService: startService,
     ping: ping,
+    // iOS-only surface
+    activateSession: activateSession,
+    deactivateSession: deactivateSession,
+    releaseSession: releaseSession,
+    resetSession: resetSession,
+    getSessionState: getSessionState,
+    setupNowPlaying: setupNowPlaying,
+    clearNowPlaying: clearNowPlaying,
+    setResumeSnapshot: setResumeSnapshot,
+    getResumeSnapshot: getResumeSnapshot,
+    clearResumeSnapshot: clearResumeSnapshot,
 };
